@@ -4,46 +4,17 @@ import pandas as pd
 from PIL import Image
 from db import get_connection
 from utils import format_date
+from styles import inject_custom_styles
 
 # Set custom page title
-st.set_page_config(page_title="NSSF Policy Tracker", layout="wide")
-st.markdown("""
-    <style>
-        .policy-card {
-            border: 2px solid #c1d72d;
-            background-color: #ffffff;
-            padding: 24px;
-            border-radius: 12px;
-            margin-bottom: 20px;
-        }
+st.set_page_config(
+    page_title="NSSF Policy Tracker",
+    page_icon="assets/small_logo.png",
+    layout="wide"
+)
 
-        .policy-table {
-            width: 100%;
-            border-bottom: 1px solid #d7d7d7;
-            border: none;
-            border-collapse: collapse;
-        }
+st.markdown(inject_custom_styles(), unsafe_allow_html=True)
 
-        .policy-table td {
-            padding: 8px;
-            border: none;
-            vertical-align: top;
-        }
-        
-        .policy-table tr {
-            padding: 8px;
-            border-bottom: 1px solid #d7d7d7;
-            vertical-align: top;
-        }
-
-        .policy-table .label {
-            font-weight: bold;
-            border: #ffca08;
-            color: black;
-            width: 180px;
-        }
-    </style>
-""", unsafe_allow_html=True)
 
 # Load logo
 logo = Image.open("assets/nssf_logo.jpg")
@@ -51,7 +22,7 @@ st.image(logo, width=250)
 
 st.title("NSSF Policy Tracker")
 
-menu = ["Add Policy", "View Policies", "Track Contributions", "Add Contributions", "Bulk Upload", "All Policies"]
+menu = ["View Policies", "Add Policy", "Track Contributions", "Add Contributions", "Bulk Upload", "All Policies"]
 choice = st.sidebar.selectbox("Menu", menu)
 
 if choice == "Add Policy":
