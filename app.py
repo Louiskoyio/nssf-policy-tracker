@@ -11,7 +11,7 @@ st.image(logo, width=250)  # You can adjust width
 st.title("NSSF Policy Tracker")
 
 
-menu = ["Add Policy", "View Policies", "Track Contributions", "Add Contributions"]
+menu = ["Add Policy", "View Policies", "Track Contributions", "Add Contributions", "Bulk Upload"]
 choice = st.sidebar.selectbox("Menu", menu)
 
 if choice == "Add Policy":
@@ -114,3 +114,59 @@ elif choice == "Add Contributions":
                 conn.commit()
                 st.success("Contribution added successfully")
     conn.close()
+
+
+elif choice == "Bulk Upload":
+    st.subheader("📤 Bulk Upload Policies")
+
+    # Download template
+    with open("assets/bulk_policy_template.xlsx", "rb") as f:
+        st.download_button("Download Excel Template", f, file_name="bulk_policy_template.xlsx")
+
+    uploaded_file = st.file_uploader("Upload Completed Excel File", type=["xlsx"])
+
+    if uploaded_file:
+        try:
+            df = pd.read_excel(uploaded_file)
+
+            expected_columns = [
+                "employer_number", "employer_name", "member_number", "member_name", "id_number",
+                "period_start", "period_end", "received_date",
+                "compliance_officer_date", "branch_manager_date", "cash_office_date"
+            ]
+
+            if list(df.columns) != expected_columns:
+                st.error("❌ The uploaded file does not match the required column structure.")
+                st.info(f"Expected columns: {expected_columns}")
+            else:
+                # Insert into DB
+                conn = get_connection()
+                cur = conn.cursor()
+
+                for _, row in df.iterrows():
+                    cur.execute('''INSERT INTO policies (
+                        employer_number, employer_name, member_number, member_name, id_number,
+                        period_start, period_end, received_date,
+                        compliance_officer_date, branch_manager_date, cash_office_date
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                    (
+                        str(row["employer_number"]),
+                        str(row["employer_name"]),
+                        str(row["member_number"]),
+                        str(row["member_name"]),
+                        str(row["id_number"]),
+                        str(pd.to_datetime(row["period_start"]).date()),
+                        str(pd.to_datetime(row["period_end"]).date()),
+                        str(pd.to_datetime(row["received_date"]).date()),
+                        str(pd.to_datetime(row["compliance_officer_date"]).date()),
+                        str(pd.to_datetime(row["branch_manager_date"]).date()),
+                        str(pd.to_datetime(row["cash_office_date"]).date())
+                    ))
+
+                conn.commit()
+                conn.close()
+                st.success(f"✅ Successfully uploaded {len(df)} policies.")
+
+        except Exception as e:
+            st.error(f"❌ Upload failed: {e}")
+
