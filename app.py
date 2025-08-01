@@ -35,3 +35,5 @@ elif choice == "Bulk Upload":
     bulk_upload.render()
 elif choice == "All Policies":
     all_policies.render()
+elif selected_page == "Policy Details":
+    policy_details.render()

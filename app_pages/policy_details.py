@@ -1,56 +1,52 @@
+# app_pages/policy_details.py
+
 import streamlit as st
 import pandas as pd
 from db import get_connection
 from utils import format_date
 
-def render_policy_details(policy_id: int):
-    st.write(f"Rendering details for policy ID: {policy_id}")  # Debug
+def render():
+    st.subheader("📄 Policy Details")
 
-    conn = get_connection()
-    cursor = conn.cursor()
+    # Get query params from URL
+    query_params = st.query_params
+    policy_id = query_params.get("policy_id", [None])[0]
 
-    # Fetch policy details
-    cursor.execute("SELECT * FROM policies WHERE id = ?", (policy_id,))
-    row = cursor.fetchone()
-
-    if not row:
-        st.error("⚠️ No policy found with that ID.")
+    if not policy_id:
+        st.error("❌ No policy ID provided in the URL.")
         return
 
-    columns = [desc[0] for desc in cursor.description]
-    policy = dict(zip(columns, row))
+    conn = get_connection()
 
-    st.subheader(f"{policy['member_name']} ({policy['member_number']})")
+    # Fetch policy details
+    policy_query = "SELECT * FROM policies WHERE id = ?"
+    policy = conn.execute(policy_query, (policy_id,)).fetchone()
 
-    # Render policy info card
-    st.markdown(f"""
-    <div class='policy-card'>
-        <table class='policy-table'>
-            <tr>
-                <td class='label'>Employer Number</td><td>{policy['employer_number']}</td>
-                <td class='label'>Employer Name</td><td>{policy['employer_name']}</td>
-            </tr>
-            <tr>
-                <td class='label'>Period Start</td><td>{format_date(policy['period_start'])}</td>
-                <td class='label'>Period End</td><td>{format_date(policy['period_end'])}</td>
-            </tr>
-        </table>
-    </div>
-    """, unsafe_allow_html=True)
+    if not policy:
+        st.error("Policy not found.")
+        return
 
-    # Contributions
-    df = pd.read_sql_query(
-        "SELECT * FROM contributions WHERE policy_id = ?",
-        conn, params=(policy_id,)
-    )
+    columns = [desc[0] for desc in conn.execute(policy_query, (policy_id,)).description]
+    policy_dict = dict(zip(columns, policy))
 
-    total = df["amount"].sum() if not df.empty else 0
-    st.markdown(f"### 💰 Total Contributions: KES {total:,.2f}")
+    # Display Policy Info
+    st.markdown("### 🧾 Policy Information")
+    for label, value in policy_dict.items():
+        if "date" in label or "period" in label:
+            value = format_date(value)
+        st.markdown(f"**{label.replace('_', ' ').title()}**: {value}")
 
-    if not df.empty:
-        df["contribution_month"] = pd.to_datetime(df["contribution_month"])
-        df = df.sort_values("contribution_month")
-        df["contribution_month"] = df["contribution_month"].dt.strftime("%b %Y")
-        st.dataframe(df)
-
+    # Fetch contributions
+    st.markdown("### 💰 Contribution History")
+    contrib_query = "SELECT contribution_month, amount FROM contributions WHERE policy_id = ? ORDER BY contribution_month"
+    df_contrib = pd.read_sql_query(contrib_query, conn, params=(policy_id,))
     conn.close()
+
+    if df_contrib.empty:
+        st.info("No contributions recorded.")
+    else:
+        df_contrib["contribution_month"] = df_contrib["contribution_month"].apply(format_date)
+        df_contrib.columns = ["Contribution Month", "Amount"]
+        total = df_contrib["Amount"].sum()
+        st.markdown(f"**Total Contributions:** KES {total:,.2f}")
+        st.dataframe(df_contrib)
