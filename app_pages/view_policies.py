@@ -3,7 +3,8 @@ import pandas as pd
 from db import get_connection
 from utils import format_date
 import sqlite3
-
+import calendar
+from datetime import datetime
 
 def render():
     st.subheader("🔍 Search Policy by Member Number or ID")
@@ -87,28 +88,72 @@ def render_search_results(search_term):
 
 def show_extra_details(policy_id, conn):
     conn.row_factory = sqlite3.Row
+    conn.row_factory = None
     cursor = conn.cursor()
-    policy = cursor.execute("SELECT * FROM policies WHERE id = ?", (policy_id,)).fetchone()
-    contributions = pd.read_sql_query("SELECT * FROM contributions WHERE policy_id = ?", conn, params=(policy_id,))
 
-    st.markdown(f"### 👤 {policy['member_name']} ({policy['member_number']})")
-    st.markdown(f"**Employer:** {policy['employer_name']} ({policy['employer_number']})")
-    st.markdown(f"**ID Number:** {policy['id_number']}")
+    # Fetch policy details
+    cursor.execute("SELECT * FROM policies WHERE id = ?", (policy_id,))
+    row = cursor.fetchone()
+    columns = [column[0] for column in cursor.description]
+    
+    # Convert row to dictionary
+    policy = dict(zip(columns, row))
 
-    st.markdown("### 🗓️ Dates")
+    if not policy:
+        st.error("Policy not found.")
+        return
+
+    # Convert period_start and period_end to datetime
+    start_date = pd.to_datetime(policy['period_start']).replace(day=1)
+    end_date = pd.to_datetime(policy['period_end'])
+
+    # Get contributions
+    contributions = pd.read_sql_query(
+        "SELECT * FROM contributions WHERE policy_id = ? ORDER BY contribution_month",
+        conn,
+        params=(policy_id,)
+    )
+
+    st.markdown("### 🗓️ Policy Dates")
     st.write(f"Period: {format_date(policy['period_start'])} to {format_date(policy['period_end'])}")
     st.write(f"Received Date: {format_date(policy['received_date'])}")
     st.write(f"Compliance Officer Date: {format_date(policy['compliance_officer_date'])}")
     st.write(f"Branch Manager Date: {format_date(policy['branch_manager_date'])}")
     st.write(f"Cash Office Date: {format_date(policy['cash_office_date'])}")
 
-    st.markdown("### 💰 Contributions")
-    if contributions.empty:
-        st.info("No contributions recorded yet.")
-    else:
-        contributions["contribution_month"] = contributions["contribution_month"].apply(format_date)
-        df = contributions[["contribution_month", "amount"]]
-        df.columns = ["Month", "Amount"]
-        st.dataframe(df)
-        total = df["Amount"].sum()
-        st.success(f"Total Contributions: KES {total:,.2f}")
+    st.markdown("---")
+    st.markdown("### 💰 Contributions Overview")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("#### ✅ Contributions Made")
+        if contributions.empty:
+            st.info("No contributions recorded yet.")
+        else:
+            contributions["contribution_month"] = pd.to_datetime(contributions["contribution_month"])
+            df = contributions[["contribution_month", "amount"]]
+            df.columns = ["Month", "Amount"]
+            df["Month"] = df["Month"].dt.strftime("%B %Y")
+            st.dataframe(df, use_container_width=True)
+            total = df["Amount"].sum()
+            st.success(f"Total Contributions: KES {total:,.2f}")
+
+    with col2:
+        st.markdown("#### ⚠️ Missed Contributions")
+
+        # Generate expected months including the start month
+        expected_months = pd.date_range(start=start_date, end=end_date, freq='MS').strftime("%B %Y").tolist()
+
+        if not contributions.empty:
+            contributed_months = contributions["contribution_month"].dt.strftime("%B %Y").tolist()
+        else:
+            contributed_months = []
+
+        missed_months = sorted(list(set(expected_months) - set(contributed_months)))
+
+        if missed_months:
+            for month in missed_months:
+                st.markdown(f"- ❌ No contribution for **{month}**")
+        else:
+            st.success("✅ All expected contributions are present.")
