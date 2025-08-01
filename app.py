@@ -5,10 +5,13 @@ from PIL import Image
 from db import get_connection
 from utils import format_date
 from styles import inject_custom_styles
+from pages.policy_details import render_policy_details
+
+
 
 # Set custom page title
 st.set_page_config(
-    page_title="NSSF Policy Tracker",
+    page_title="NSSF Schedule Tracker",
     page_icon="assets/small_logo.png",
     layout="wide"
 )
@@ -20,7 +23,7 @@ st.markdown(inject_custom_styles(), unsafe_allow_html=True)
 logo = Image.open("assets/nssf_logo.jpg")
 st.image(logo, width=250)
 
-st.title("NSSF Policy Tracker")
+st.title("NSSF Schedule Tracker")
 
 menu = ["View Policies", "Add Policy", "Track Contributions", "Add Contributions", "Bulk Upload", "All Policies"]
 choice = st.sidebar.selectbox("Menu", menu)
@@ -61,6 +64,7 @@ if choice == "Add Policy":
 elif choice == "View Policies":
     st.subheader("🔍 Search Policy by Member Number or ID")
     search = st.text_input("Enter Member Number or ID Number")
+    
 
     if st.button("Search"):
         conn = get_connection()
@@ -108,6 +112,8 @@ elif choice == "View Policies":
                             <td class='label'>Total Contributions</td><td>{total_display}</td>
                         </tr>
                     </table>
+                  
+                  
                 </div>
                 """, unsafe_allow_html=True)
         conn.close()
@@ -115,37 +121,58 @@ elif choice == "View Policies":
 
 
 elif choice == "Track Contributions":
-    st.subheader("🔢 Total Contributions Summary")
+    st.subheader("🔍 Search Contributions by Member Number")
 
-    conn = get_connection()
-    query = '''
-        SELECT 
-            p.id AS policy_id,
-            p.member_name,
-            SUM(c.amount) AS total_contribution
-        FROM policies p
-        LEFT JOIN contributions c ON p.id = c.policy_id
-        GROUP BY p.id, p.member_name
-        ORDER BY total_contribution DESC
-    '''
-    df_summary = pd.read_sql_query(query, conn)
-    df_summary["total_contribution"] = df_summary["total_contribution"].fillna(0.0)
-    st.dataframe(df_summary)
-    conn.close()
-
-    st.subheader("View Contributions by Policy")
-    policy_id = st.number_input("Enter Policy ID", min_value=1)
+    member_number = st.text_input("Enter Member Number")
     start_date = st.date_input("Start Date")
     end_date = st.date_input("End Date")
-    if st.button("Filter Contributions"):
-        conn = get_connection()
-        query = '''
-            SELECT * FROM contributions
-            WHERE policy_id = ? AND contribution_month BETWEEN ? AND ?
-        '''
-        df_contrib = pd.read_sql_query(query, conn, params=(policy_id, start_date, end_date))
-        conn.close()
-        st.dataframe(df_contrib)
+
+    if st.button("Search"):
+        if member_number.strip() == "":
+            st.warning("Please enter a valid Member Number.")
+        elif start_date > end_date:
+            st.warning("Start date cannot be after end date.")
+        else:
+            conn = get_connection()
+
+            # Fetch policy info
+            policy_query = '''
+                SELECT id, member_name FROM policies WHERE member_number = ?
+            '''
+            policy = conn.execute(policy_query, (member_number.strip(),)).fetchone()
+
+            if not policy:
+                st.error("No policy found for that member number.")
+            else:
+                policy_id = policy[0]
+                member_name = policy[1]
+
+                # Fetch contributions within date range
+                contrib_query = '''
+                    SELECT contribution_month, amount
+                    FROM contributions
+                    WHERE policy_id = ?
+                    AND contribution_month BETWEEN ? AND ?
+                    ORDER BY contribution_month ASC
+                '''
+                df_contrib = pd.read_sql_query(contrib_query, conn, params=(policy_id, start_date, end_date))
+                conn.close()
+
+                st.markdown(f"### 🧑 Member: {member_name}")
+                st.markdown(f"**Date Range:** {format_date(start_date)} to {format_date(end_date)}")
+
+                if df_contrib.empty:
+                    st.info("No contributions recorded for this policy in the selected date range.")
+                else:
+                    df_contrib["contribution_month"] = df_contrib["contribution_month"].apply(format_date)
+                    df_contrib.columns = ["Contribution Month", "Amount"]
+
+                    total = df_contrib["Amount"].sum()
+                    st.markdown(f"**Total Contributions:** KES {total:,.2f}")
+
+                    st.dataframe(df_contrib)
+
+
 
 elif choice == "Add Contributions":
     st.subheader("Add Contribution Record")
@@ -232,4 +259,16 @@ elif choice == "All Policies":
     conn = get_connection()
     df = pd.read_sql_query("SELECT * FROM policies", conn)
     conn.close()
+
+    # Format column headers: replace underscores with spaces and capitalize
+    df.columns = [col.replace("_", " ").title() for col in df.columns]
+
+    # Format date columns using your utility function
+    date_columns = [
+        "Period Start", "Period End", "Received Date",
+        "Compliance Officer Date", "Branch Manager Date", "Cash Office Date"
+    ]
+    for col in date_columns:
+        df[col] = df[col].apply(lambda x: format_date(x) if pd.notnull(x) else "")
+
     st.dataframe(df)
