@@ -1,21 +1,61 @@
 import streamlit as st
+import sqlite3
 import pandas as pd
-from db import init_db, get_connection
-from datetime import date
 from PIL import Image
+from db import get_connection
+from utils import format_date
 
-init_db()
+# Set custom page title
+st.set_page_config(page_title="NSSF Policy Tracker", layout="wide")
+st.markdown("""
+    <style>
+        .policy-card {
+            border: 2px solid #c1d72d;
+            background-color: #ffffff;
+            padding: 24px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
+
+        .policy-table {
+            width: 100%;
+            border-bottom: 1px solid #d7d7d7;
+            border: none;
+            border-collapse: collapse;
+        }
+
+        .policy-table td {
+            padding: 8px;
+            border: none;
+            vertical-align: top;
+        }
+        
+        .policy-table tr {
+            padding: 8px;
+            border-bottom: 1px solid #d7d7d7;
+            vertical-align: top;
+        }
+
+        .policy-table .label {
+            font-weight: bold;
+            border: #ffca08;
+            color: black;
+            width: 180px;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
+# Load logo
 logo = Image.open("assets/nssf_logo.jpg")
+st.image(logo, width=250)
 
-st.image(logo, width=250)  # You can adjust width
 st.title("NSSF Policy Tracker")
 
-
-menu = ["Add Policy", "View Policies", "Track Contributions", "Add Contributions", "Bulk Upload"]
+menu = ["Add Policy", "View Policies", "Track Contributions", "Add Contributions", "Bulk Upload", "All Policies"]
 choice = st.sidebar.selectbox("Menu", menu)
 
 if choice == "Add Policy":
-    st.subheader("Register a New Policy")
+    st.subheader("Add New Policy")
     with st.form("policy_form"):
         employer_number = st.text_input("Employer Number")
         employer_name = st.text_input("Employer Name")
@@ -24,40 +64,86 @@ if choice == "Add Policy":
         id_number = st.text_input("ID Number")
         period_start = st.date_input("Period Start")
         period_end = st.date_input("Period End")
-        received_date = st.date_input("Received at Office")
-        compliance_date = st.date_input("Issued to Compliance Officer")
-        branch_date = st.date_input("Moved to Branch Manager")
-        cash_date = st.date_input("Finalised at Cash Office")
+        received_date = st.date_input("Received Date")
+        compliance_officer_date = st.date_input("Compliance Officer Date")
+        branch_manager_date = st.date_input("Branch Manager Date")
+        cash_office_date = st.date_input("Cash Office Date")
+        submit = st.form_submit_button("Add Policy")
 
-        submitted = st.form_submit_button("Save Policy")
-        if submitted:
+        if submit:
             conn = get_connection()
-            cur = conn.cursor()
-            cur.execute('''INSERT INTO policies (
+            cursor = conn.cursor()
+            cursor.execute('''INSERT INTO policies (
                 employer_number, employer_name, member_number, member_name, id_number,
                 period_start, period_end, received_date,
                 compliance_officer_date, branch_manager_date, cash_office_date
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-            (employer_number, employer_name, member_number, member_name, id_number,
-             period_start.isoformat(), period_end.isoformat(),
-             received_date.isoformat(), compliance_date.isoformat(),
-             branch_date.isoformat(), cash_date.isoformat()))
+            (
+                employer_number, employer_name, member_number, member_name, id_number,
+                period_start, period_end, received_date,
+                compliance_officer_date, branch_manager_date, cash_office_date
+            ))
             conn.commit()
             conn.close()
-            st.success("Policy registered successfully")
+            st.success("Policy added successfully")
 
 elif choice == "View Policies":
-    st.subheader("Search and View Policies")
-    search_term = st.text_input("Search by Member Number or ID")
-    conn = get_connection()
-    df = pd.read_sql_query("SELECT * FROM policies", conn)
-    if search_term:
-        df = df[df['member_number'].str.contains(search_term) | df['id_number'].str.contains(search_term)]
-    st.dataframe(df)
+    st.subheader("🔍 Search Policy by Member Number or ID")
+    search = st.text_input("Enter Member Number or ID Number")
+
+    if st.button("Search"):
+        conn = get_connection()
+        query = '''SELECT * FROM policies WHERE member_number LIKE ? OR id_number LIKE ?'''
+        df = pd.read_sql_query(query, conn, params=(f"%{search}%", f"%{search}%"))
+
+        if df.empty:
+            st.warning("No policy found.")
+        else:
+            for _, row in df.iterrows():
+                policy_id = row["id"]
+
+                # Fetch total contributions
+                contrib_query = '''SELECT SUM(amount) FROM contributions WHERE policy_id = ?'''
+                cur = conn.cursor()
+                cur.execute(contrib_query, (policy_id,))
+                total = cur.fetchone()[0]
+                total_display = f"KES {total:,.2f}" if total else "No contributions yet"
+
+                st.markdown(f"""
+                <div class='policy-card'>
+                    <table class='policy-table'>
+                        <tr>
+                            <td class='label'>Employer Number</td><td>{row['employer_number']}</td>
+                            <td class='label'>Employer Name</td><td>{row['employer_name']}</td>
+                        </tr>
+                        <tr>
+                            <td class='label'>Member Number</td><td>{row['member_number']}</td>
+                            <td class='label'>Member Name</td><td>{row['member_name']}</td>
+                        </tr>
+                        <tr>
+                            <td class='label'>ID Number</td><td>{row['id_number']}</td>
+                            <td class='label'>Period Start</td><td>{format_date(row['period_start'])}</td>
+                        </tr>
+                        <tr>
+                            <td class='label'>Period End</td><td>{format_date(row['period_end'])}</td>
+                            <td class='label'>Received Date</td><td>{format_date(row['received_date'])}</td>
+                        </tr>
+                        <tr>
+                            <td class='label'>Compliance Officer Date</td><td>{format_date(row['compliance_officer_date'])}</td>
+                            <td class='label'>Branch Manager Date</td><td>{format_date(row['branch_manager_date'])}</td>
+                        </tr>
+                        <tr>
+                            <td class='label'>Cash Office Date</td><td>{format_date(row['cash_office_date'])}</td>
+                            <td class='label'>Total Contributions</td><td>{total_display}</td>
+                        </tr>
+                    </table>
+                </div>
+                """, unsafe_allow_html=True)
+        conn.close()
+
+
 
 elif choice == "Track Contributions":
-    st.subheader("View Contributions by Policy")
-        # --- Show total contributions per policy ---
     st.subheader("🔢 Total Contributions Summary")
 
     conn = get_connection()
@@ -76,20 +162,26 @@ elif choice == "Track Contributions":
     st.dataframe(df_summary)
     conn.close()
 
-    policy_id = st.number_input("Enter Policy ID", min_value=1, step=1)
-    date_range = st.date_input("Select Date Range", [date(2000,1,1), date.today()])
-    if st.button("Fetch Contributions"):
+    st.subheader("View Contributions by Policy")
+    policy_id = st.number_input("Enter Policy ID", min_value=1)
+    start_date = st.date_input("Start Date")
+    end_date = st.date_input("End Date")
+    if st.button("Filter Contributions"):
         conn = get_connection()
-        query = '''SELECT * FROM contributions WHERE policy_id = ? AND contribution_month BETWEEN ? AND ?'''
-        df = pd.read_sql_query(query, conn, params=(policy_id, date_range[0].isoformat(), date_range[1].isoformat()))
-        st.dataframe(df)
+        query = '''
+            SELECT * FROM contributions
+            WHERE policy_id = ? AND contribution_month BETWEEN ? AND ?
+        '''
+        df_contrib = pd.read_sql_query(query, conn, params=(policy_id, start_date, end_date))
+        conn.close()
+        st.dataframe(df_contrib)
+
 elif choice == "Add Contributions":
     st.subheader("Add Contribution Record")
 
     conn = get_connection()
     cursor = conn.cursor()
 
-    # Fetch policy options
     cursor.execute("SELECT id, member_name, member_number FROM policies")
     policies = cursor.fetchall()
 
@@ -100,7 +192,6 @@ elif choice == "Add Contributions":
         selected_policy = st.selectbox("Select Policy", list(policy_options.keys()))
         policy_id = policy_options[selected_policy]
 
-        # Contribution form
         with st.form("contribution_form"):
             contrib_month = st.date_input("Contribution Month")
             amount = st.number_input("Amount", min_value=0.0, step=100.0)
@@ -115,11 +206,8 @@ elif choice == "Add Contributions":
                 st.success("Contribution added successfully")
     conn.close()
 
-
 elif choice == "Bulk Upload":
     st.subheader("📤 Bulk Upload Policies")
-
-    # Download template
     with open("assets/bulk_policy_template.xlsx", "rb") as f:
         st.download_button("Download Excel Template", f, file_name="bulk_policy_template.xlsx")
 
@@ -128,7 +216,6 @@ elif choice == "Bulk Upload":
     if uploaded_file:
         try:
             df = pd.read_excel(uploaded_file)
-
             expected_columns = [
                 "employer_number", "employer_name", "member_number", "member_name", "id_number",
                 "period_start", "period_end", "received_date",
@@ -139,7 +226,6 @@ elif choice == "Bulk Upload":
                 st.error("❌ The uploaded file does not match the required column structure.")
                 st.info(f"Expected columns: {expected_columns}")
             else:
-                # Insert into DB
                 conn = get_connection()
                 cur = conn.cursor()
 
@@ -170,3 +256,9 @@ elif choice == "Bulk Upload":
         except Exception as e:
             st.error(f"❌ Upload failed: {e}")
 
+elif choice == "All Policies":
+    st.subheader("📋 All Policies Table")
+    conn = get_connection()
+    df = pd.read_sql_query("SELECT * FROM policies", conn)
+    conn.close()
+    st.dataframe(df)
