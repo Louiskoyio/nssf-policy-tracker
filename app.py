@@ -8,10 +8,10 @@ init_db()
 logo = Image.open("assets/nssf_logo.jpg")
 
 st.image(logo, width=250)  # You can adjust width
-st.title("📅 NSSF Policy Tracker")
+st.title("NSSF Policy Tracker")
 
 
-menu = ["Add Policy", "View Policies", "Track Contributions"]
+menu = ["Add Policy", "View Policies", "Track Contributions", "Add Contributions"]
 choice = st.sidebar.selectbox("Menu", menu)
 
 if choice == "Add Policy":
@@ -64,3 +64,34 @@ elif choice == "Track Contributions":
         query = '''SELECT * FROM contributions WHERE policy_id = ? AND contribution_month BETWEEN ? AND ?'''
         df = pd.read_sql_query(query, conn, params=(policy_id, date_range[0].isoformat(), date_range[1].isoformat()))
         st.dataframe(df)
+elif choice == "Add Contributions":
+    st.subheader("Add Contribution Record")
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # Fetch policy options
+    cursor.execute("SELECT id, member_name, member_number FROM policies")
+    policies = cursor.fetchall()
+
+    if not policies:
+        st.warning("No policies found. Please add a policy first.")
+    else:
+        policy_options = {f"{p[1]} ({p[2]}) [ID: {p[0]}]": p[0] for p in policies}
+        selected_policy = st.selectbox("Select Policy", list(policy_options.keys()))
+        policy_id = policy_options[selected_policy]
+
+        # Contribution form
+        with st.form("contribution_form"):
+            contrib_month = st.date_input("Contribution Month")
+            amount = st.number_input("Amount", min_value=0.0, step=100.0)
+            submitted = st.form_submit_button("Add Contribution")
+
+            if submitted:
+                cursor.execute(
+                    "INSERT INTO contributions (policy_id, contribution_month, amount) VALUES (?, ?, ?)",
+                    (policy_id, contrib_month.isoformat(), amount)
+                )
+                conn.commit()
+                st.success("Contribution added successfully")
+    conn.close()
