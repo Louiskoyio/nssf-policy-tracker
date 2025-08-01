@@ -57,6 +57,25 @@ elif choice == "View Policies":
 
 elif choice == "Track Contributions":
     st.subheader("View Contributions by Policy")
+        # --- Show total contributions per policy ---
+    st.subheader("🔢 Total Contributions Summary")
+
+    conn = get_connection()
+    query = '''
+        SELECT 
+            p.id AS policy_id,
+            p.member_name,
+            SUM(c.amount) AS total_contribution
+        FROM policies p
+        LEFT JOIN contributions c ON p.id = c.policy_id
+        GROUP BY p.id, p.member_name
+        ORDER BY total_contribution DESC
+    '''
+    df_summary = pd.read_sql_query(query, conn)
+    df_summary["total_contribution"] = df_summary["total_contribution"].fillna(0.0)
+    st.dataframe(df_summary)
+    conn.close()
+
     policy_id = st.number_input("Enter Policy ID", min_value=1, step=1)
     date_range = st.date_input("Select Date Range", [date(2000,1,1), date.today()])
     if st.button("Fetch Contributions"):
