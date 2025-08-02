@@ -9,6 +9,8 @@ DB_PATH.parent.mkdir(exist_ok=True)
 def init_db():
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
+
+        # Existing tables
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS policies (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -25,6 +27,7 @@ def init_db():
                 cash_office_date TEXT
             )
         ''')
+
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS contributions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -34,6 +37,32 @@ def init_db():
                 FOREIGN KEY(policy_id) REFERENCES policies(id)
             )
         ''')
+
+        # NEW: Table for uploaded schedules
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS schedules (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                member_number TEXT NOT NULL,
+                member_name TEXT NOT NULL,
+                file_path TEXT NOT NULL,
+                uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        # NEW: Table for schedule tracking stages
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS schedule_stages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                schedule_id INTEGER NOT NULL,
+                stage TEXT NOT NULL,  -- 'Compliance Officer', 'Branch Manager', 'Accountant'
+                entered_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                exited_at TIMESTAMP,
+                duration_days REAL,
+                handled_by TEXT,
+                FOREIGN KEY(schedule_id) REFERENCES schedules(id)
+            )
+        ''')
+
         conn.commit()
 
 def get_connection():
