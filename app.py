@@ -3,7 +3,7 @@ from PIL import Image
 from styles import inject_custom_styles
 from app_pages import  (
     view_policies, add_policy, track_contributions,
-    add_contributions, bulk_upload, all_policies,upload_schedule
+    add_contributions, bulk_upload, all_policies,upload_schedule,track_schedules
 )
 
 # Set page config and styles
@@ -17,7 +17,7 @@ st.title("NSSF Schedule Tracker")
 
 # Sidebar Menu
 menu = [
-    "View Policies", "Upload Schedule","Add Policy", "Track Contributions",
+    "View Policies", "Upload Schedule","Track Schedules","Add Policy", "Track Contributions",
     "Add Contributions", "Bulk Upload", "All Policies"
 ]
 choice = st.sidebar.selectbox("Menu", menu)
@@ -27,6 +27,8 @@ if choice == "View Policies":
     view_policies.render()
 elif choice == "Upload Schedule":
     upload_schedule.render()
+elif choice == "Track Schedules":
+    track_schedules.render()
 elif choice == "Add Policy":
     add_policy.render()
 elif choice == "Track Contributions":
@@ -37,6 +39,5 @@ elif choice == "Bulk Upload":
     bulk_upload.render()
 elif choice == "All Policies":
     all_policies.render()
-elif selected_page == "Policy Details":
-    policy_details.render()
+
 

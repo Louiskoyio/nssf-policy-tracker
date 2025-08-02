@@ -1,6 +1,7 @@
 import sqlite3
 from pathlib import Path
 
+
 DB_PATH = Path("data/policies.db")
 
 # Ensure data folder exists
@@ -62,8 +63,15 @@ def init_db():
                 FOREIGN KEY(schedule_id) REFERENCES schedules(id)
             )
         ''')
+        
 
         conn.commit()
 
 def get_connection():
-    return sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row  # Enables dictionary-like access
+    return conn
+
+
+init_db()
+

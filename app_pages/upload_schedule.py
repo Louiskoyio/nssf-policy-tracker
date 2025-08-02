@@ -6,9 +6,6 @@ from db import get_connection
 
 def render():
     st.title("📤 Upload Contribution Schedule")
-    st.info("Upload an Excel file with the following columns:\n\n"
-            "`employer number`, `member no`, `year`, `january`, `february`, ..., `december`\n\n"
-            "All contributions will be recorded using the 1st day of each indicated month.")
 
     uploaded_file = st.file_uploader("Upload Excel Schedule", type=["xlsx"])
 
@@ -84,6 +81,16 @@ def render():
                 f.write(uploaded_file.getbuffer())
 
             st.success(f"📁 Schedule saved as: `{save_name}`")
+
+            # ✅ INSERT into schedules table so it appears in tracking page
+            conn = get_connection()
+            cur = conn.cursor()
+            cur.execute('''
+                INSERT INTO schedules (member_number, member_name, file_path, uploaded_at)
+                VALUES (?, ?, ?, ?)
+            ''', (member_no, member_name, save_name, timestamp))
+            conn.commit()
+            conn.close()
 
         except Exception as e:
             st.error(f"❌ Error processing file: {e}")

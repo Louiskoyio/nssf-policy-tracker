@@ -30,7 +30,7 @@ def render():
         current_stage = cur.fetchone()
 
         if current_stage:
-            st.success(f"🧭 Current Stage: {current_stage['stage']} (By: {current_stage['handled_by']})")
+            st.success(f"🧭 Current Stage: {current_stage[0]} (By: {current_stage[1]})")
             entered = pd.to_datetime(current_stage["entered_at"])
             elapsed = (datetime.now() - entered).days
             st.write(f"⏱️ Days at stage: {elapsed}")
@@ -73,6 +73,7 @@ def render():
                 cur.execute(insert_query, (row["id"], next_stage, now, handler))
                 conn.commit()
                 st.success("Stage moved successfully!")
-                st.experimental_rerun()
+                st.rerun()
+
 
     conn.close()
