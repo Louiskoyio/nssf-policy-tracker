@@ -17,7 +17,7 @@ st.title("NSSF Schedule Tracker")
 
 # Sidebar Menu
 menu = [
-    "View Policies", "Upload Schedule","Track Schedules","Add Policy", "Track Contributions",
+    "Track Schedules", "Upload Schedule", "Track Contributions",
     "Add Contributions", "Bulk Upload", "All Policies"
 ]
 choice = st.sidebar.selectbox("Menu", menu)

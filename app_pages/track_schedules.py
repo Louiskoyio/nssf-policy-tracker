@@ -38,7 +38,8 @@ def render_schedule_results(search_term):
         received_date = format_date(timestamp)
 
         with st.container():
-    
+            st.title(f"{member_name} - {member_number} ({received_date})")
+
             # Fetch current stage
             cursor.execute("""
                 SELECT stage, handled_by, entered_at
@@ -49,70 +50,89 @@ def render_schedule_results(search_term):
             """, (schedule_id,))
             current_stage = cursor.fetchone()
 
-            if current_stage:
-                stage = current_stage["stage"]
-                handler = current_stage["handled_by"]
-                entered = pd.to_datetime(current_stage["entered_at"])
-                days = (datetime.now() - entered).days
-                #st.success(f"🧭 Current Stage: {stage} (By: {handler}) — {days} day(s) ago")
-                st.markdown(f"### {member_name} - {member_number} ({received_date})")
-            else:
-                st.info("🕐 Not yet tracked.")
-
-            # Horizontal stage tracker
             all_stages = ["Compliance Officer", "Branch Manager", "Accountant", "Fully Processed"]
+            stage = current_stage["stage"] if current_stage else None
+            current_stage_index = all_stages.index(stage) if stage in all_stages else -1
+
+            # Stage progress bar
             cursor.execute("""
                 SELECT stage, entered_at FROM schedule_stages
                 WHERE schedule_id = ?
                 ORDER BY entered_at ASC
             """, (schedule_id,))
             history = cursor.fetchall()
-            completed_stages = [h["stage"] for h in history]
 
-            # Render horizontal progress bar
-            # Render horizontal progress bar with inferred progress
             st.markdown("""
                 <style>
-                .progress-container {
+                .progress-bar {
                     display: flex;
                     justify-content: space-between;
-                    margin: 12px 0;
+                    align-items: center;
+                    margin: 20px 0;
                 }
-                .stage-box {
-                    flex: 1;
+                .stage {
+                    flex-grow: 1;
                     text-align: center;
                     padding: 10px;
-                    margin: 0 5px;
+                    margin-right: 4px;
                     border-radius: 6px;
-                    border: 1px solid #ddd;
-                    font-size: 14px;
-                }
-                .completed {
-                    background-color: #4CAF50;
+                    font-size: 13px;
                     color: white;
-                    font-weight: bold;
+                    background-color: #ccc;
+                    position: relative;
                 }
-                .current {
+                .stage.completed {
+                    background-color: #4CAF50;
+                }
+                .stage.current {
                     background-color: #fdd835;
                     color: black;
                     font-weight: bold;
                 }
+                .stage::after {
+                    content: '';
+                    position: absolute;
+                    top: 50%;
+                    right: -2px;
+                    transform: translateY(-50%);
+                    height: 100%;
+                    width: 4px;
+                    background-color: white;
+                    z-index: 1;
+                }
+                .stage:last-child::after {
+                    display: none;
+                }
+                .custom-clickable {
+                    display: inline-block;
+                    background-color: #4CAF50;
+                    color: white;
+                    padding: 10px 20px;
+                    border-radius: 6px;
+                    font-weight: bold;
+                    cursor: pointer;
+                    transition: 0.3s ease;
+                    margin-top: 10px;
+                }
+                .custom-clickable:hover {
+                    background-color: #c1d62f;
+                    color: black;
+                }
                 </style>
             """, unsafe_allow_html=True)
 
-            stages = ["Compliance Officer", "Branch Manager", "Accountant", "Fully Processed"]
-            current_stage_index = stages.index(stage) if stage in stages else -1
-
-            st.markdown("<div class='progress-container'>", unsafe_allow_html=True)
-            for i, s in enumerate(stages):
-                css_class = "stage-box"
+            # Render horizontal progress bar
+            progress_html = "<div class='progress-bar'>"
+            for i, s in enumerate(all_stages):
                 if i < current_stage_index:
-                    css_class += " completed"
+                    css_class = "stage completed"
                 elif i == current_stage_index:
-                    css_class += " current"
-                st.markdown(f"<div class='{css_class}'>{s}</div>", unsafe_allow_html=True)
-            st.markdown("</div>", unsafe_allow_html=True)
-
+                    css_class = "stage current"
+                else:
+                    css_class = "stage"
+                progress_html += f"<div class='{css_class}'>{s}</div>"
+            progress_html += "</div>"
+            st.markdown(progress_html, unsafe_allow_html=True)
 
             # Timeline summary
             if history:
@@ -129,19 +149,58 @@ def render_schedule_results(search_term):
                     })
 
                 df = pd.DataFrame(timeline_data)
-                st.dataframe(df)
+                table_html = """
+                <table class="custom-timeline-table">
+                    <thead>
+                        <tr>
+                """
+                for col in df.columns:
+                    table_html += f"<th>{col}</th>"
+                table_html += "</tr></thead><tbody>"
+                for _, row in df.iterrows():
+                    table_html += "<tr>"
+                    for col in df.columns:
+                        table_html += f"<td>{row[col]}</td>"
+                    table_html += "</tr>"
+                table_html += "</tbody></table>"
 
-            # Stage Update Form
-            with st.form(f"track_form_{schedule_id}"):
-                new_stage = st.selectbox("Move to Stage", ["Compliance Officer", "Branch Manager", "Accountant", "Fully Processed"])
-                handled_by = st.text_input("Handled by (name or ID)")
-                if st.form_submit_button("📌 Update Stage"):
+                st.markdown("""
+                    <style>
+                    .custom-timeline-table {
+                        border-collapse: collapse;
+                        width: 100%;
+                        margin-top: 10px;
+                    }
+                    .custom-timeline-table th {
+                        background-color: #4CAF50; 
+                        color: white;
+                        font-weight: bold;
+                        padding: 8px;
+                        text-align: left;
+                    }
+                    .custom-timeline-table td {
+                        padding: 8px;
+                        border: 1px solid #ddd;
+                    }
+                    </style>
+                """, unsafe_allow_html=True)
+                st.markdown(table_html, unsafe_allow_html=True)
+
+            # Auto-progress button logic
+            if current_stage_index < len(all_stages) - 1:
+                next_stage = all_stages[current_stage_index + 1]
+    
+
+                # Use clickable div as a button
+                if st.button(f"Move to {next_stage}"):
                     cursor.execute("""
                         INSERT INTO schedule_stages (schedule_id, stage, handled_by, entered_at)
                         VALUES (?, ?, ?, ?)
-                    """, (schedule_id, new_stage, handled_by, datetime.now()))
+                    """, (schedule_id, next_stage, "System", datetime.now()))
                     conn.commit()
-                    st.success("✅ Stage updated!")
+                    st.success(f"✅ Moved to stage: {next_stage}")
                     st.rerun()
+            else:
+                st.success("🎉 This schedule is fully processed.")
 
     conn.close()
