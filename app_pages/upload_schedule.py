@@ -89,6 +89,13 @@ def render():
                 INSERT INTO schedules (member_number, member_name, file_path, uploaded_at)
                 VALUES (?, ?, ?, ?)
             ''', (member_no, member_name, save_name, timestamp))
+
+            schedule_id = cur.lastrowid
+            cur.execute('''
+                INSERT INTO schedule_stages (schedule_id, stage, handled_by, entered_at)
+                VALUES (?, ?, ?, ?)
+            ''', (schedule_id, "Compliance Officer", "System", datetime.now()))
+
             conn.commit()
             conn.close()
 
