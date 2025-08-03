@@ -172,8 +172,8 @@ def render_schedule_results(search_term):
                         margin-top: 10px;
                     }
                     .custom-timeline-table th {
-                        background-color: #4CAF50; 
-                        color: white;
+                        background-color: #c1d72d; 
+                        color: black;
                         font-weight: bold;
                         padding: 8px;
                         text-align: left;
